@@ -41,6 +41,13 @@ async def near_miss(message: Message):
             await bot.send_message(chat_id=CHAT_ID, text=message.text)
 
 
+@dp.message(F.text == 'О боте')
+async def about_us(message: Message):
+    await message.answer('Для отображения кнопок бота набрать и отправить сообщение - /start\n\n'
+                         'Бот предоставляет возможность отправить фотографию или видео,'
+                         ' а также комментарии к ним для предотвращения негативного развития событий.')
+
+
 @dp.message(F.text == 'О нас')
 async def about_us(message: Message):
     await message.answer('Коблик Оренбург входит в состав KOBLIK GROUP.\n'
