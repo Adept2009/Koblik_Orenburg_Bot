@@ -1,6 +1,8 @@
+import os
+from dotenv import load_dotenv
 from aiogram import Bot, F, Router
-from aiogram.types import Message, ContentType, InputFile
-from aiogram.filters import CommandStart, Command
+from aiogram.types import Message
+from aiogram.filters import CommandStart
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 
@@ -13,10 +15,10 @@ from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 
-from config import CHAT_ID, FROM_EMAIL, PASSWORD_EMAIL, TO_EMAIL
-
 import app.keyboards as kb
 
+
+load_dotenv()
 
 router = Router()
 
@@ -30,8 +32,8 @@ class SendNearMiss(StatesGroup):
 @router.message(CommandStart())
 async def cmd_start(message: Message):
     await message.answer(f'Привет!\nВаше имя: {message.from_user.first_name}\n'
-                        f'Ваше имя пользователя: {message.from_user.username}\n'
-                        f'Ваш ID: {message.from_user.id}', reply_markup=kb.main)
+                         f'Ваше имя пользователя: {message.from_user.username}\n'
+                         f'Ваш ID: {message.from_user.id}', reply_markup=kb.main)
 
 
 @router.message(F.text == 'Near-miss')
@@ -66,11 +68,11 @@ async def near_miss_content(message: Message, state: FSMContext, bot: Bot):
     print(data)
     await message.answer('Спасибо за участие в мероприятиях по безопасному производству')
     title = f'<b>NEAR-MISS от {data["name"]}.</b>'
-    await bot.send_message(chat_id=CHAT_ID,
+    await bot.send_message(chat_id=os.getenv('CHAT_ID'),
                            text=title,
                            parse_mode='HTML')
-    await bot.send_photo(chat_id=CHAT_ID, photo=data["media"])
-    await bot.send_message(chat_id=CHAT_ID, text=data["msg"])
+    await bot.send_photo(chat_id=os.getenv('CHAT_ID'), photo=data["media"])
+    await bot.send_message(chat_id=os.getenv('CHAT_ID'), text=data["msg"])
 
     photo_file_id = data["media"]
     print(photo_file_id)
@@ -80,13 +82,19 @@ async def near_miss_content(message: Message, state: FSMContext, bot: Bot):
     # Надо сохранять файлы на комп/сервер, а после отправки на e-mail удалять (чтобы не занимать место)
     # А в последствии надо реализовать проверку, чтобы удалять файлы только после того, как пришел ответ от
     # почтового сервера, что письмо доставлено.
-    from_email = FROM_EMAIL
-    to_email = TO_EMAIL
+    from_email = os.getenv('FROM_EMAIL')
+
+    # Для рассылки если импортируешь КОНСТАНТУ из .py файла, то указываешь только константу (например TO_EMAIL),
+    # если импортируешь из .env файла ОДИН строковый элемент (например 'db@mail.ru'), то так - os.getenv('TO_EMAIL')
+    # если импортируешь из .env файла НЕСКОЛЬКО (нап. 'db@mail.ru, pnp@mail.ru'), то - os.getenv('TO_EMAIL').split(', ')
+    to_email = os.getenv('TO_EMAIL').split(', ')
+    print(to_email)
     subject = title[3:-4]   # Добавил срез для удаления HTML разметки, разметка добавлена для заголовка в ТГ
 
     msg = MIMEMultipart()
     msg['From'] = from_email
     msg['To'] = ', '.join(to_email)     # Для отправки списком (несколько получателеЙ) ОБЯЗАТЕЛЬНО сделать через join
+    print(msg['To'])
     msg['Subject'] = subject
 
     # Подготовка картинки к отправке
@@ -102,13 +110,20 @@ async def near_miss_content(message: Message, state: FSMContext, bot: Bot):
     try:
         with smtplib.SMTP('smtp.yandex.ru', 587) as smtp:
             smtp.starttls()
-            smtp.login(from_email, PASSWORD_EMAIL)
+            smtp.login(from_email, os.getenv('PASSWORD_EMAIL'))
             smtp.sendmail(from_email, to_email, msg.as_string())
             smtp.quit()
+
     except smtplib.SMTPDataError:
         await message.answer('При отправке Near-Miss на почту, что-то пошло не так!\n'
                              'Возможно почтовый сервер посчитал, что вы отправляете СПАМ.\n'
                              'Попробуйте отправить сообщение еще раз, через некоторое время.')
+
+    except smtplib.SMTPRecipientsRefused:
+        await message.answer('При отправке Near-Miss на почту, что-то пошло не так!\n'
+                             'Возможно на почтовом сервере произошел сбой.\n'
+                             'Попробуйте отправить сообщение еще раз, через некоторое время.\n'
+                             'Если данная ошибка повториться, обратитесь в техническую поддержку бота.')
 
     await state.clear()
 
@@ -127,4 +142,3 @@ async def about_us(message: Message):
                          ' и собственную сеть дилерских центров более чем в 20 регионах России. '
                          'Крупнейший отечественный производитель элеваторного оборудования и прицепной'
                          ' техники для операций на комплексах КРС.')
-
